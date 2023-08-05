@@ -58,58 +58,96 @@ const PAGE = 'https://w5.ab.ust.hk/wcq/cgi-bin/2310/'
       const coursesHandle = await page.$$('#classes > .course')
 
       //TODO: Loop through the course list
-      for (let i = 9; i < 10; i++) {
+      for (let i = 16; i < 17; i++) {
         const courseHandle = coursesHandle[i]
         let course: CourseType = {} as CourseType
         let sections: SectionType[] = []
 
-        // get the code, credit, name
-        const title = await courseHandle.$eval('h2', (el) => el.innerText)
-        const code_credit_name = parseCourseString(title)
-        course.code = code_credit_name.code
-        course.name = code_credit_name.name
-        course.credit = code_credit_name.credit
+        // // get the code, credit, name
+        // const title = await courseHandle.$eval('h2', (el) => el.innerText)
+        // const code_credit_name = parseCourseString(title)
+        // course.code = code_credit_name.code
+        // course.name = code_credit_name.name
+        // course.credit = code_credit_name.credit
 
-        // get the description, exclusion, prerequisites and info
-        const courseInfoRows = await courseHandle.$$(
-          '.courseinfo .popupdetail > table > tbody > tr'
+        // // get the description, exclusion, prerequisites and info
+        // const courseInfoRows = await courseHandle.$$(
+        //   '.courseinfo .popupdetail > table > tbody > tr'
+        // )
+        // let info: Record<string, string> = {}
+        // for (const row of courseInfoRows) {
+        //   try {
+        //     const label = await row.$eval(
+        //       'th',
+        //       (el) => el.innerHTML.replace(/<br>/g, ' ') // replace all <br> with space
+        //     )
+
+        //     const value = await row.$eval('td', (el) => el.innerText)
+
+        //     switch (label) {
+        //       case 'DESCRIPTION':
+        //         course.description = value
+        //         break
+        //       case 'PRE-REQUISITE':
+        //         course.prerequisites = value.split(',')
+        //         break
+        //       case 'EXCLUSION':
+        //         course.exclusion = value.split(',')
+        //         break
+        //       default:
+        //         info[label] = value
+        //       // You can add more cases for other labels if needed
+        //     }
+        //   } catch (e) {
+        //     // Handle any errors that occur during evaluation
+        //     console.error('Error:', e)
+        //   }
+        // }
+        // course.info = info
+
+        // get the sections
+        const sectionRowsHandle = await courseHandle.$$(
+          '.sections > tbody > tr:not(:first-child)'
         )
-        let info: Record<string, string> = {}
-        for (const row of courseInfoRows) {
-          try {
-            const label = await row.$eval(
-              'th',
-              (el) => el.innerHTML.replace(/<br>/g, ' ') // replace all <br> with space
+
+        let section: SectionType | null = null
+        for (const rowHandle of sectionRowsHandle) {
+          const isNewSection = await rowHandle.evaluate((el) =>
+            el.classList.contains('newsect')
+          )
+          if (isNewSection) {
+            section && sections.push(section)
+            section = {} as SectionType
+
+            section.code = await rowHandle.$eval(
+              'td:nth-child(1)',
+              (el) => el.innerText
             )
+            const instructorHandle = await rowHandle.$('td:nth-child(4)')
 
-            const value = await row.$eval('td', (el) => el.innerText)
+            if (instructorHandle)
+              section.instructor = await instructorHandle.$$eval('a', (els) =>
+                els.map((el) => el.innerText)
+              )
 
-            switch (label) {
-              case 'DESCRIPTION':
-                course.description = value
-                break
-              case 'PRE-REQUISITE':
-                course.prerequisites = value.split(',')
-                break
-              case 'EXCLUSION':
-                course.exclusion = value.split(',')
-                break
-              default:
-                info[label] = value
-              // You can add more cases for other labels if needed
-            }
-          } catch (e) {
-            // Handle any errors that occur during evaluation
-            console.error('Error:', e)
+            section.remarks = await rowHandle.$eval(
+              'td:last-child .popupdetail',
+              (el) => el.textContent?.replace(/<br>/g, ' ')
+            )
+          } else {
           }
         }
+        section && sections.push(section)
 
+        console.log(sections)
+
+        course.sections = sections
         courses.push(course)
         // }
       }
     }
 
-    console.log(courses)
+    // console.log(courses)
   } catch (error) {
     console.log(error)
   }
