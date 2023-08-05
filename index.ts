@@ -2,6 +2,7 @@ import puppeteer from 'puppeteer-core'
 import { Page } from 'puppeteer-core'
 import { CourseType, SectionType } from './data'
 import { parseCourseString } from './helper'
+import fs from 'fs'
 
 const PAGE = 'https://w5.ab.ust.hk/wcq/cgi-bin/2310/'
 
@@ -49,7 +50,7 @@ const PAGE = 'https://w5.ab.ust.hk/wcq/cgi-bin/2310/'
     let courses: CourseType[] = []
 
     //TODO: Loop through the navigator URLs
-    for (let i = 0; i < 1; i++) {
+    for (let i = 0; i < navigatorUrls.length; i++) {
       const department = navigatorUrls[i]
       const url = department
       if (!page.url().startsWith(url))
@@ -58,52 +59,52 @@ const PAGE = 'https://w5.ab.ust.hk/wcq/cgi-bin/2310/'
       const coursesHandle = await page.$$('#classes > .course')
 
       //TODO: Loop through the course list
-      for (let i = 16; i < 17; i++) {
+      for (let i = 0; i < coursesHandle.length; i++) {
         const courseHandle = coursesHandle[i]
         let course: CourseType = {} as CourseType
         let sections: SectionType[] = []
 
-        // // get the code, credit, name
-        // const title = await courseHandle.$eval('h2', (el) => el.innerText)
-        // const code_credit_name = parseCourseString(title)
-        // course.code = code_credit_name.code
-        // course.name = code_credit_name.name
-        // course.credit = code_credit_name.credit
+        // get the code, credit, name
+        const title = await courseHandle.$eval('h2', (el) => el.innerText)
+        const code_credit_name = parseCourseString(title)
+        course.code = code_credit_name.code
+        course.name = code_credit_name.name
+        course.credit = code_credit_name.credit
 
-        // // get the description, exclusion, prerequisites and info
-        // const courseInfoRows = await courseHandle.$$(
-        //   '.courseinfo .popupdetail > table > tbody > tr'
-        // )
-        // let info: Record<string, string> = {}
-        // for (const row of courseInfoRows) {
-        //   try {
-        //     const label = await row.$eval(
-        //       'th',
-        //       (el) => el.innerHTML.replace(/<br>/g, ' ') // replace all <br> with space
-        //     )
+        // get the description, exclusion, prerequisites and info
+        const courseInfoRows = await courseHandle.$$(
+          '.courseinfo .popupdetail > table > tbody > tr'
+        )
+        let info: Record<string, string> = {}
+        for (const row of courseInfoRows) {
+          try {
+            const label = await row.$eval(
+              'th',
+              (el) => el.innerHTML.replace(/<br>/g, ' ') // replace all <br> with space
+            )
 
-        //     const value = await row.$eval('td', (el) => el.innerText)
+            const value = await row.$eval('td', (el) => el.innerText)
 
-        //     switch (label) {
-        //       case 'DESCRIPTION':
-        //         course.description = value
-        //         break
-        //       case 'PRE-REQUISITE':
-        //         course.prerequisites = value.split(',')
-        //         break
-        //       case 'EXCLUSION':
-        //         course.exclusion = value.split(',')
-        //         break
-        //       default:
-        //         info[label] = value
-        //       // You can add more cases for other labels if needed
-        //     }
-        //   } catch (e) {
-        //     // Handle any errors that occur during evaluation
-        //     console.error('Error:', e)
-        //   }
-        // }
-        // course.info = info
+            switch (label) {
+              case 'DESCRIPTION':
+                course.description = value
+                break
+              case 'PRE-REQUISITE':
+                course.prerequisites = value.split(',')
+                break
+              case 'EXCLUSION':
+                course.exclusion = value.split(',')
+                break
+              default:
+                info[label] = value
+              // You can add more cases for other labels if needed
+            }
+          } catch (e) {
+            // Handle any errors that occur during evaluation
+            console.error('Error:', e)
+          }
+        }
+        course.info = info
 
         // get the sections
         const sectionRowsHandle = await courseHandle.$$(
@@ -130,24 +131,29 @@ const PAGE = 'https://w5.ab.ust.hk/wcq/cgi-bin/2310/'
                 els.map((el) => el.innerText)
               )
 
-            section.remarks = await rowHandle.$eval(
-              'td:last-child .popupdetail',
-              (el) => el.textContent?.replace(/<br>/g, ' ')
-            )
+            // section.remarks = await rowHandle.$eval(
+            //   'td:last-child .popupdetail',
+            //   (el) => el.textContent?.replace(/<br>/g, ' ')
+            // )
           } else {
           }
         }
         section && sections.push(section)
 
-        console.log(sections)
-
         course.sections = sections
         courses.push(course)
         // }
       }
+
+      // await Promise.resolve(()=>{
+      //   setTimeout(() => {
+
+      //   },2000)
+      // })
     }
 
-    // console.log(courses)
+    const coursesJson = JSON.stringify(courses)
+    fs.writeFileSync('courses.json', coursesJson)
   } catch (error) {
     console.log(error)
   }
