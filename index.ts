@@ -1,7 +1,15 @@
 import puppeteer from 'puppeteer-core'
 import { Page } from 'puppeteer-core'
-import { CourseType, SectionType } from './data'
-import { parseCourseString } from './helper'
+import {
+  CourseType,
+  SectionType,
+  SpecificTimeAndLocationType,
+  TimeAndLocationType,
+  TimeSpecificType,
+  TimeWeeklyType,
+  WeeklyTimeAndLocationType
+} from './data'
+import { parseCourseString, parseDateTime } from './helper'
 import fs from 'fs'
 
 const PAGE = 'https://w5.ab.ust.hk/wcq/cgi-bin/2310/'
@@ -50,16 +58,14 @@ const PAGE = 'https://w5.ab.ust.hk/wcq/cgi-bin/2310/'
     let courses: CourseType[] = []
 
     //TODO: Loop through the navigator URLs
-    for (let i = 0; i < navigatorUrls.length; i++) {
-      const department = navigatorUrls[i]
-      const url = department
+    for (let i = 0; i < 1; i++) {
+      const url = navigatorUrls[i]
       if (!page.url().startsWith(url))
         await page.goto(url, { waitUntil: 'domcontentloaded' })
 
       const coursesHandle = await page.$$('#classes > .course')
 
-      //TODO: Loop through the course list
-      for (let i = 0; i < coursesHandle.length; i++) {
+      for (let i = 0; i < 1; i++) {
         const courseHandle = coursesHandle[i]
         let course: CourseType = {} as CourseType
         let sections: SectionType[] = []
@@ -112,37 +118,117 @@ const PAGE = 'https://w5.ab.ust.hk/wcq/cgi-bin/2310/'
         )
 
         let section: SectionType | null = null
+        let timeAndLocation = {} as {
+          data: SpecificTimeAndLocationType[] | WeeklyTimeAndLocationType[]
+          type: 'specific' | 'weekly'
+        }
+        let l = 0
         for (const rowHandle of sectionRowsHandle) {
           const isNewSection = await rowHandle.evaluate((el) =>
             el.classList.contains('newsect')
           )
           if (isNewSection) {
-            section && sections.push(section)
-            section = {} as SectionType
+            const sectionCopy = Object.assign({}, section)
+            section && sections.push(sectionCopy)
 
+            section = {} as SectionType
+            section.timeAndLocation = timeAndLocation as any
+
+            // section code
             section.code = await rowHandle.$eval(
               'td:nth-child(1)',
               (el) => el.innerText
             )
-            const instructorHandle = await rowHandle.$('td:nth-child(4)')
 
+            // section instructor
+            const instructorHandle = await rowHandle.$('td:nth-child(4)')
             if (instructorHandle)
               section.instructor = await instructorHandle.$$eval('a', (els) =>
                 els.map((el) => el.innerText)
               )
 
-            // section.remarks = await rowHandle.$eval(
-            //   'td:last-child .popupdetail',
-            //   (el) => el.textContent?.replace(/<br>/g, ' ')
-            // )
+            // section remarks
+            try {
+              section.remarks = await rowHandle.$eval(
+                'td:last-child .popupdetail',
+                (el) => el.textContent?.replace(/<br>/g, ' ')
+              )
+            } catch (e) {
+              section.remarks = undefined
+            }
+
+            // section timeandlocation
+            const textContent = await rowHandle.$eval(
+              'td:nth-child(2)',
+              (el) => el.textContent
+            )
+            const location = await rowHandle.$eval(
+              'td:nth-child(3)',
+              (el) => el.innerText
+            )
+
+            let type: 'specific' | 'weekly' = 'specific'
+            let dateAndTime = null
+            if (textContent && textContent !== 'TBA') {
+              if (textContent.includes('<br>')) {
+                type = 'specific'
+              }
+              type = 'weekly'
+              dateAndTime = parseDateTime(textContent)
+            }
+
+            if (dateAndTime && dateAndTime.length > 0) {
+              section.timeAndLocation.type = type
+              if (type === 'specific') {
+                section.timeAndLocation.data = (
+                  dateAndTime as unknown as TimeSpecificType[]
+                ).map((dateAndTime) => ({
+                  location: location,
+                  time: dateAndTime
+                }))
+              } else {
+                section.timeAndLocation.data = (
+                  dateAndTime as unknown as TimeWeeklyType[]
+                ).map((dateAndTime) => ({
+                  location: location,
+                  time: dateAndTime
+                }))
+              }
+            }
           } else {
+            const textContent = await rowHandle.$eval(
+              'td:nth-child(1)',
+              (el) => el.textContent
+            )
+            const location = await rowHandle.$eval(
+              'td:nth-child(2)',
+              (el) => el.innerText
+            )
+
+            let dateAndTime = null
+            if (textContent && textContent !== 'TBA') {
+              dateAndTime = parseDateTime(textContent)
+            }
+            if (dateAndTime && dateAndTime.length > 0) {
+              const newDates = dateAndTime.map((dateAndTime) => ({
+                location: location,
+                time: dateAndTime
+              }))
+
+              section!.timeAndLocation.data.push(...(newDates as any))
+            }
           }
+          console.log(l)
+          l++
+          console.log(sections.map((s) => s?.timeAndLocation?.data))
         }
-        section && sections.push(section)
+        const sectionCopy = Object.assign({}, section)
+        section && sections.push(sectionCopy)
+        // console.log(section!.timeAndLocation.data)
 
         course.sections = sections
+        // console.log(sections)
         courses.push(course)
-        // }
       }
 
       // await Promise.resolve(()=>{
@@ -152,8 +238,14 @@ const PAGE = 'https://w5.ab.ust.hk/wcq/cgi-bin/2310/'
       // })
     }
 
-    const coursesJson = JSON.stringify(courses)
-    fs.writeFileSync('courses.json', coursesJson)
+    // const coursesJson = JSON.stringify(courses, null, 2)
+    // fs.writeFileSync('courses.json', coursesJson)
+    // console.log(
+    //   courses[0].sections.map((d) => ({
+    //     code: d.code,
+    //     data: d.timeAndLocation.data
+    //   }))
+    // )
   } catch (error) {
     console.log(error)
   }
