@@ -58,14 +58,14 @@ const PAGE = 'https://w5.ab.ust.hk/wcq/cgi-bin/2310/'
     let courses: CourseType[] = []
 
     //TODO: Loop through the navigator URLs
-    for (let i = 0; i < 1; i++) {
+    for (let i = 0; i < navigatorUrls.length; i++) {
       const url = navigatorUrls[i]
       if (!page.url().startsWith(url))
         await page.goto(url, { waitUntil: 'domcontentloaded' })
 
       const coursesHandle = await page.$$('#classes > .course')
 
-      for (let i = 0; i < 1; i++) {
+      for (let i = 0; i < coursesHandle.length; i++) {
         const courseHandle = coursesHandle[i]
         let course: CourseType = {} as CourseType
         let sections: SectionType[] = []
@@ -118,11 +118,7 @@ const PAGE = 'https://w5.ab.ust.hk/wcq/cgi-bin/2310/'
         )
 
         let section: SectionType | null = null
-        let timeAndLocation = {} as {
-          data: SpecificTimeAndLocationType[] | WeeklyTimeAndLocationType[]
-          type: 'specific' | 'weekly'
-        }
-        let l = 0
+
         for (const rowHandle of sectionRowsHandle) {
           const isNewSection = await rowHandle.evaluate((el) =>
             el.classList.contains('newsect')
@@ -132,7 +128,7 @@ const PAGE = 'https://w5.ab.ust.hk/wcq/cgi-bin/2310/'
             section && sections.push(sectionCopy)
 
             section = {} as SectionType
-            section.timeAndLocation = timeAndLocation as any
+            section.timeAndLocation = {} as any
 
             // section code
             section.code = await rowHandle.$eval(
@@ -218,9 +214,6 @@ const PAGE = 'https://w5.ab.ust.hk/wcq/cgi-bin/2310/'
               section!.timeAndLocation.data.push(...(newDates as any))
             }
           }
-          console.log(l)
-          l++
-          console.log(sections.map((s) => s?.timeAndLocation?.data))
         }
         const sectionCopy = Object.assign({}, section)
         section && sections.push(sectionCopy)
@@ -238,18 +231,11 @@ const PAGE = 'https://w5.ab.ust.hk/wcq/cgi-bin/2310/'
       // })
     }
 
-    // const coursesJson = JSON.stringify(courses, null, 2)
-    // fs.writeFileSync('courses.json', coursesJson)
-    // console.log(
-    //   courses[0].sections.map((d) => ({
-    //     code: d.code,
-    //     data: d.timeAndLocation.data
-    //   }))
-    // )
+    const coursesJson = JSON.stringify(courses, null, 2)
+    fs.writeFileSync('hkust-courses.json', coursesJson)
   } catch (error) {
     console.log(error)
+  } finally {
+    await browser.close()
   }
-  // finally {
-  //   await browser.close()
-  // }
 })()
